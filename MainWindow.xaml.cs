@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
@@ -33,7 +33,7 @@ namespace Media_Downloader
 
         #region Arguments, Fields and other pseudostatic thingies
         //Version
-        private readonly String CurrentVersion = "0.7.2a";
+        private readonly String CurrentVersion = "0.2123.2.0";
 
         //Youtube-dl
         Process Youtube_dl = new Process();
@@ -193,6 +193,10 @@ namespace Media_Downloader
         private string MainPath = "";
         private string PresetsFilePath = "";
 
+        //Telepon's things
+
+        private string FileName_Filename; //The name of the file that stores the name of the file being downloaded. That's a mouthful.
+
         //Extensiones
         private String _ExtensionSeleccionada = "";
         public string ExtensionSeleccionada
@@ -294,7 +298,10 @@ namespace Media_Downloader
             //añadimos la carpeta de salida al programa
             Youtube_dl.StartInfo.Arguments = Argumentos;
 
-            GetDownloadNames(MainPath + "Filenames.tmp", txt_URL.Text);
+            //We assign a name to the file that stores the name of the file being downloaded
+            FileName_Filename = DateTime.Now.Ticks.ToString("X16") + ".tmp";
+
+            GetDownloadNames(MainPath + FileName_Filename, txt_URL.Text);
 
             Dispatcher.BeginInvoke((Action)delegate
             {
@@ -364,9 +371,9 @@ namespace Media_Downloader
                 StatusBar.Text = Properties.Strings.Convirtiendo_Archivos;
             }, DispatcherPriority.Background);
             FFMPEG conversor = new FFMPEG(YoutubedlPath + "ffmpeg.exe");
-            conversor.Convert(MainPath + "Filenames.tmp", ExtensionSeleccionada);
+            conversor.Convert(MainPath + FileName_Filename, ExtensionSeleccionada);
 
-            while (File.Exists(MainPath + "Filenames.tmp"))
+            while (File.Exists(MainPath + FileName_Filename))
             {
                 Thread.Sleep(200);
             }
@@ -1007,10 +1014,17 @@ namespace Media_Downloader
                 SavePresetsToFile(PresetsFilePath, TempPreset);
             }
 
-            if (File.Exists(MainPath + "Filenames.tmp"))
+            //normally, here we would search and destroy the file that stores the name of the file being downloaded
+            //However, we do not know the name of the file, as it was pseudorandomly generated
+            //We could delete any files that end with .tmp, but that would delete currently used files
+            //We could simply remove *.tmp files that are older than X
+            //We'll comment this code out, and figure out a solution later
+
+            /*if (File.Exists(MainPath + FileName_Filename))
             {
-                File.Delete(MainPath + "Filenames.tmp");
+                File.Delete(MainPath + FileName_Filename);
             }
+            */
 
             Presets = LoadPresetsFromFile(PresetsFilePath);
 
