@@ -33,7 +33,7 @@ namespace Media_Downloader
 
         #region Arguments, Fields and other pseudostatic thingies
         //Version
-        private readonly String CurrentVersion = "0.2123.2.0";
+        private readonly String CurrentVersion = "0.7.3-T";
 
         //Youtube-dl
         Process Youtube_dl = new Process();
@@ -301,91 +301,116 @@ namespace Media_Downloader
             //We assign a name to the file that stores the name of the file being downloaded
             FileName_Filename = DateTime.Now.Ticks.ToString("X16") + ".tmp";
 
-            GetDownloadNames(MainPath + FileName_Filename, txt_URL.Text);
+            
 
             Dispatcher.BeginInvoke((Action)delegate
             {
                 Btn_Descargar.IsEnabled = false;
                 StatusBar.Text = Properties.Strings.Descargando_archivos;
-            }, DispatcherPriority.Background);
+            }, DispatcherPriority.Background); //We de-activate the "Download" button until the thread starts, and also set a text in the GUI, indicating the start of the download
 
 
-            Youtube_dl.Start();
-            Youtube_dl.WaitForExit();
+            string PiggyBack_URL = txt_URL.Text; //because I can't access the class when declaring the thread
 
-            if (Youtube_dl.ExitCode > 0 && DevMode != false) //Habemus fallo (Y al estar DevMode Activado. Pensamos que no podria ser normal)
-            {
-                Dispatcher.BeginInvoke((Action)delegate
-                {
-                    StatusBar.Text = Properties.Strings.Fallo_en_la_descarga;
-                }, DispatcherPriority.Background);
-                MessageBoxResult resultado = MessageBox.Show(Properties.Strings.DownloadErrorMsg,
-                Properties.Strings.DownloadErrorTitle,
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Error);
+            //THREADING START. Two threads; one for the "GetDownloadNames" function and other for the "DownloadFunc".
+            Thread ThreadedGetDownloadNames = new Thread(() => GetDownloadNames(MainPath + FileName_Filename, PiggyBack_URL));
+            Thread ThreadedDownload = new Thread(() => DownloadFunc(Youtube_dl, FileName_Filename, ExtensionSeleccionada));
 
-                if (resultado.Equals(MessageBoxResult.Yes))
-                {
-                    Log = true; DevMode = true; Verbose = true; //Habilitamos todas las opciones de debug/log
-                    RefrescarComando(); Refescar_STARTINFO();
-                    Youtube_dl.Start();
-                }
-            }
-
-            if (Log)
-            {
-                Dispatcher.BeginInvoke((Action)delegate
-                {
-                    StatusBar.Text = Properties.Strings.Generando_log;
-                }, DispatcherPriority.Background);
-                String log = "", errlog = "";
-                StreamReader strOutStream, strErrStream;
-                String LogFile = MainPath + "Log.txt";
-                //Podria encapsular esto en un metodo, pero para dos veces que se va a usar.
-
-                //Get Standard Output
-                strOutStream = Youtube_dl.StandardOutput;
-                while (!strOutStream.EndOfStream)
-                {
-                    log += strOutStream.ReadLine() + "\n";
-                }
-
-                //Get ErrorOutput
-                strErrStream = Youtube_dl.StandardError;
-                while (!strErrStream.EndOfStream)
-                {
-                    errlog += strErrStream.ReadLine() + "\n";
-                }
-                File.WriteAllText(LogFile, errlog);
-
-                //Write to File
-                String SalidaLog = "------------------------------------------------------" +
-                    "\n" + DateTime.Now.ToString() +
-                    "\n\n" + errlog +
-                    "\n" + log;
-
-                File.WriteAllText(LogFile, SalidaLog);
-            }
-            Dispatcher.BeginInvoke((Action)delegate
-            {
-                StatusBar.Text = Properties.Strings.Convirtiendo_Archivos;
-            }, DispatcherPriority.Background);
-            FFMPEG conversor = new FFMPEG(YoutubedlPath + "ffmpeg.exe");
-            conversor.Convert(MainPath + FileName_Filename, ExtensionSeleccionada);
-
-            while (File.Exists(MainPath + FileName_Filename))
-            {
-                Thread.Sleep(200);
-            }
+            ThreadedDownload.Start();
 
             Dispatcher.BeginInvoke((Action)delegate
             {
                 Btn_Descargar.IsEnabled = true;
-                StatusBar.Text = "";
-            }, DispatcherPriority.Background);
+            }, DispatcherPriority.Background); //We activate the "Download" button after the thread starts
+
+            void DownloadFunc(Process Thread_Youtube_dl, string Thread_Filename_Filenames, string TargetFormat) //We need to pass: The Process class, the Path of the file that contains the name of the file being downloaded. the target format
+            {
+                ThreadedGetDownloadNames.Start(); //We start the thread for getting the names of the files being downloaded
+
+                Thread_Youtube_dl.Start();
+                Thread_Youtube_dl.WaitForExit(); //We start Youtube-dl.exe and wait for it to finish
+
+                if (Thread_Youtube_dl.ExitCode > 0 && DevMode != false) //Habemus fallo (Y al estar DevMode Activado. Pensamos que no podria ser normal)
+                {
+                    Dispatcher.BeginInvoke((Action)delegate
+                    {
+                        StatusBar.Text = Properties.Strings.Fallo_en_la_descarga;
+                    }, DispatcherPriority.Background);
+                    MessageBoxResult resultado = MessageBox.Show(Properties.Strings.DownloadErrorMsg,
+                    Properties.Strings.DownloadErrorTitle,
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Error);
+
+                    if (resultado.Equals(MessageBoxResult.Yes))
+                    {
+                        Log = true; DevMode = true; Verbose = true; //Habilitamos todas las opciones de debug/log
+                        RefrescarComando(); Refescar_STARTINFO();
+                        Thread_Youtube_dl.Start();
+                    }
+                }
+
+                if (Log)
+                {
+                    Dispatcher.BeginInvoke((Action)delegate
+                    {
+                        StatusBar.Text = Properties.Strings.Generando_log;
+                    }, DispatcherPriority.Background);
+                    String log = "", errlog = "";
+                    StreamReader strOutStream, strErrStream;
+                    String LogFile = MainPath + "Log.txt";
+                    //Podria encapsular esto en un metodo, pero para dos veces que se va a usar.
+
+                    //Get Standard Output
+                    strOutStream = Thread_Youtube_dl.StandardOutput;
+                    while (!strOutStream.EndOfStream)
+                    {
+                        log += strOutStream.ReadLine() + "\n";
+                    }
+
+                    //Get ErrorOutput
+                    strErrStream = Thread_Youtube_dl.StandardError;
+                    while (!strErrStream.EndOfStream)
+                    {
+                        errlog += strErrStream.ReadLine() + "\n";
+                    }
+                    File.WriteAllText(LogFile, errlog);
+
+                    //Write to File
+                    String SalidaLog = "------------------------------------------------------" +
+                        "\n" + DateTime.Now.ToString() +
+                        "\n\n" + errlog +
+                        "\n" + log;
+
+                    File.WriteAllText(LogFile, SalidaLog);
+                }
+
+                ThreadedGetDownloadNames.Join(); //Before starting the conversion, we wait for the thread that gets the names of the files being downloaded, to end.
+
+                Dispatcher.BeginInvoke((Action)delegate
+                {
+                    StatusBar.Text = Properties.Strings.Convirtiendo_Archivos;
+                }, DispatcherPriority.Background);
+
+                
+
+                FFMPEG conversor = new FFMPEG(YoutubedlPath + "ffmpeg.exe");
+                conversor.Convert(MainPath + Thread_Filename_Filenames, TargetFormat);
+
+                while (File.Exists(MainPath + Thread_Filename_Filenames))
+                {
+                    Thread.Sleep(200);
+                }
+
+                Dispatcher.BeginInvoke((Action)delegate
+                {
+                    Btn_Descargar.IsEnabled = true;
+                    StatusBar.Text = "";
+                }, DispatcherPriority.Background);
+            }
+            //THREADING END
         }
 
-        private async void GetDownloadNames(String file, String url)
+        private void GetDownloadNames(String file, String url)
         {
 
             String args = "";
@@ -401,32 +426,29 @@ namespace Media_Downloader
             {
                 args += " --no-playlist";
             }
-
-
-            ThreadStart threadStart = new ThreadStart(() =>
+          
+            Process pr = new Process();
+            pr.StartInfo = new ProcessStartInfo
             {
-                Process pr = new Process();
-                pr.StartInfo = new ProcessStartInfo
-                {
-                    FileName = YoutubedlPath + "Youtube-dl.exe",
-                    RedirectStandardOutput = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                    Arguments = " --get-filename" + args + " -o \"" + DownloadPath + formatoDescarga + "\" --restrict-filenames \"" + url + "\""
-                };
-                Console.Write(pr.StartInfo.Arguments);
-                pr.Start();
-                StreamReader strOutStream = pr.StandardOutput;
-                String salida = "";
-                while (!strOutStream.EndOfStream)
-                {
+                FileName = YoutubedlPath + "Youtube-dl.exe",
+                RedirectStandardOutput = true,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                Arguments = " --get-filename" + args + " -o \"" + DownloadPath + formatoDescarga + "\" --restrict-filenames \"" + url + "\""
+            };
+
+            Console.Write(pr.StartInfo.Arguments);
+            pr.Start();
+            StreamReader strOutStream = pr.StandardOutput;
+            String salida = "";
+            while (!strOutStream.EndOfStream)
+            {
                     salida += strOutStream.ReadLine() + "\n";
-                }
-                salida.TrimEnd();
-                File.WriteAllText(file, salida);
-            });
-            Thread th = new Thread(threadStart);
-            th.Start();
+            }
+            salida.TrimEnd();
+            File.WriteAllText(file, salida);
+            
+            
         }
 
         private void Refescar_STARTINFO()
@@ -1019,6 +1041,32 @@ namespace Media_Downloader
             //We could delete any files that end with .tmp, but that would delete currently used files
             //We could simply remove *.tmp files that are older than X
             //We'll comment this code out, and figure out a solution later
+            //Talked with @Yoshi, the best solution may be to delte the .tmp files found only if the current instance of mediadownloader is the only one running.
+
+            //we first count how many processes called "Media_Downloader" are there
+
+            int Int_RunningInstancesCounter = 0;
+            Process[] ProcessList = Process.GetProcesses();
+
+            foreach(Process ProcessToCheck in ProcessList)
+            {
+                if(ProcessToCheck.ProcessName == "Media_Downloader") { Int_RunningInstancesCounter++; }
+
+            }
+
+            if(Int_RunningInstancesCounter == 1) //and if there's only one instance (the current one)...
+            {
+                foreach(string Filename in Directory.GetFiles(MainPath)) //...initiate a search & destroy for *.tmp files in the main directory
+                {
+                    if(Path.GetExtension(Filename) == ".tmp") 
+                    {
+                        File.Delete(Filename);
+                    }
+
+                }
+
+            }
+
 
             /*if (File.Exists(MainPath + FileName_Filename))
             {
